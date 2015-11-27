@@ -1,0 +1,22 @@
+<preCompilationAnalysis file="../src/gameLogic.c">
+  <fCall global="true" name="calculateNeighboursAlive"/>
+  <fCall global="true" name="calculateNeighboursAlive.nstackwords"/>
+  <fCall global="true" name="calculateNeighboursAlive.maxcores"/>
+  <fCall global="true" name="calculateNeighboursAlive.maxtimers"/>
+  <fCall global="true" name="calculateNeighboursAlive.maxchanends"/>
+  <fCall global="true" name="calculateNextCellValue"/>
+  <fCall global="true" name="calculateNextCellValue.nstackwords"/>
+  <fCall global="true" name="iprintf.nstackwords"/>
+  <fCall global="true" name="calculateNextCellValue.maxcores"/>
+  <fCall global="true" name="iprintf.maxcores"/>
+  <fCall global="true" name="calculateNextCellValue.maxtimers"/>
+  <fCall global="true" name="iprintf.maxtimers"/>
+  <fCall global="true" name="calculateNextCellValue.maxchanends"/>
+  <fCall global="true" name="iprintf.maxchanends"/>
+  <fCall global="true" name="calculateNextBoard"/>
+  <fCall global="true" name="calculateNextBoard.nstackwords"/>
+  <fCall global="true" name="calculateNextBoard.maxcores"/>
+  <fCall global="true" name="calculateNextBoard.maxtimers"/>
+  <fCall global="true" name="calculateNextBoard.maxchanends"/>
+  <fCall global="true" name="iprintf"/>
+</preCompilationAnalysis>

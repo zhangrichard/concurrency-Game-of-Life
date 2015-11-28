@@ -416,6 +416,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
     if (DEBUG){
             printf("intoDistributor\n");
         }
+    timer t;
+    int start_time;
+    int end_time;
+
+    uchar val;
         int round =0;
          int output;
 //         static int numberOfWorker = 2;
@@ -430,14 +435,14 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
          for (int i = 0;i<numberOfWorker;i++){
              for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
                    for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-                         c_in :> board[i][y][x];                    //read the pixel value
+                       c_in :> board[i][y][x];                    //read the pixel value
                         }
               }
          }
 //         fromAcc:>int acc;
+         t:>start_time;
          while(1){
             fromButton:>int value;
-
             // get top line
             for(int i = 0;i<numberOfWorker;i++){
                 for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -476,6 +481,8 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
              printf("round number is %d\n",round);
              round++;
 //             memcpy(board,nextBoard,IMHT*IMWD*sizeof(uchar));
+             t :> end_time;
+             printf("Number of timer ticks elapsed: %u", end_time - start_time);
          }
 
          //receive from process2

@@ -25,7 +25,7 @@ on tile[0]:port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Y_LSB 0x4
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
-#define numberOfWorker 4
+#define numberOfWorker 8
 char infname[] = "test.pgm";
 char outfname[] = "testout.pgm";
 on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
@@ -37,45 +37,17 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
-
-int showLEDs(out port p, chanend fromVisualiser) {
+int showLEDs(out port p, chanend fromDist) {
   int pattern; //1st bit...separate green LED
                //2nd bit...blue LED
                //3rd bit...green LED
                //4th bit...red LED for reading
   while (1) {
-    fromVisualiser :> pattern;   //receive new pattern from visualiser
+    fromDist :> pattern;   //receive new pattern from visualiser
     p <: pattern;                //send pattern to LED port
-
   }
   return 0;
 }
-//int checkrules(uchar farm[IMHT][IMWD], int n, int m) {
-//
-//    // 4 rules
-//    int neighbourlive = 0;
-//
-//    //check neibourlive number
-//    for (int i = n - 1; i <= n + 1; i++) {
-//        for (int j = m - 1; j <= m + 1; j++) {
-//            if (i >= 0 && j >= 0 && i < 16 && j < 16) {
-//                //check not outbound
-//                if (farm[i][j] == LIVE &&!(i==n && j==m )) {
-//                    neighbourlive++;
-//
-//                }
-//            }
-//        }
-//    }
-//    if (farm[n][m] == LIVE) {
-//        if (neighbourlive < 2) return 0;
-//        if (neighbourlive == 2 || neighbourlive == 3) return farm[n][m];
-//        if (neighbourlive > 3) return 0;
-//    }
-//    else if (neighbourlive == 3) return LIVE;
-//    else return farm[n][m];
-//
-//}
 void visualiser(chanend distributorToVisualiser, chanend toLEDs) {
 //  unsigned int userAntToDisplay = 11;
 //  unsigned int attackerAntToDisplay = 2;
@@ -131,7 +103,6 @@ void DataInStream( char infname[],chanend c_out)
     printf( "DataInStream: Error openening %s\n.", infname );
     return;
   }
-
   //Read image line-by-line and send byte by byte to channel c_out
   for( int y = 0; y < IMHT; y++ ) {
     _readinline( line, IMWD );
@@ -143,13 +114,11 @@ void DataInStream( char infname[],chanend c_out)
 
     printf( "\n" );
   }
-
   //Close PGM image file
   _closeinpgm();
   printf( "DataInStream:Done...\n" );
   return;
 }
-
 void buttonListener(in port b, chanend toDistributor ) {
   int r;
   int stop;
@@ -169,53 +138,12 @@ void buttonListener(in port b, chanend toDistributor ) {
 // Currently the function just inverts the image
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-
-
-void output(chanend c_out,chanend fromProcess1,chanend fromProcess2){
-    if (DEBUG){
-        printf("start outputing in output\n");
-    }
-    int ready1;
-    int ready2;
-    uchar val;
-    select {
-        case fromProcess1:>ready1:
-    for( int y = 0; y < IMHT/2; y++ ) {   //go through all lines
-               for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-
-                 fromProcess1 :> val;                    //read the pixel value
-                 c_out<:val;
-        //         c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
-               }
-
-             }
-    if (DEBUG){
-           printf("finish output for process1\n");
-       }
-    break;
-        case fromProcess2:>ready2:
-    for( int y = 0; y < IMHT/2; y++ ) {   //go through all lines
-                  for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-                    fromProcess2 :> val;                    //read the pixel value
-                    c_out<:val;
-           //         c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
-                  }
-                }
-    if (DEBUG){
-             printf("finish output for process2\n");
-         }
-    break;
-    }
-}
-
 uchar calculateNextValue(uchar farm[IMHT/numberOfWorker+2][IMWD], int n, int m) {
-    if (DEBUG){
-        printf("calculateing\n");
-    }
-    //
+//    if (n ==1 && m ==1){
+//        printf("calculateing\n");
+//    }
 //    // 4 rules
     int neighbourlive = 0;
-
     //check neibourlive number
     for (int i = n - 1; i <= n + 1; i++) {
         for (int j = m - 1; j <= m + 1; j++) {
@@ -224,7 +152,6 @@ uchar calculateNextValue(uchar farm[IMHT/numberOfWorker+2][IMWD], int n, int m) 
                 }
         }
     }
-
     // the rule here
     if (farm[n][m] == LIVE) {
         if (neighbourlive < 2) return 0;
@@ -235,162 +162,6 @@ uchar calculateNextValue(uchar farm[IMHT/numberOfWorker+2][IMWD], int n, int m) 
     else return farm[n][m];
 
 }
-void worker(uchar array[IMHT/numberOfWorker+2][IMWD],uchar newArray[IMHT/numberOfWorker][IMWD]){
-//    uchar newArray[HALF/4][IMWD];
-    if (DEBUG){
-        printf("intoWorker\n");
-    }
-    // only check the half height is enough the addition info is for outbound checking
-    for (int y = 0; y < HALF/4; ++y) {
-        for (int x = 0; x < IMWD; ++x) {
-            newArray[y][x]=calculateNextValue(array,y,x);
-        }
-    }
-//    memcpy(array,newArray,(HALF/4)*IMWD*sizeof(uchar));
-}
-
-transaction inArray (chanend c, int data[],int size){
-    for (int i = 0;  i < size; ++ i) {
-        c<:data[i];
-    }
-}
-
-//void Process2(chanend fromDistributor){
-//    if (DEBUG){
-//        printf("intoProcess2\n");
-//    }
-//    int round =0;
-//     int output;
-//     int LASTLINE = HALF/4+1;
-//     uchar worker1[HALF/4+2][IMWD];// first from bottom, second from top
-//     uchar worker2[HALF/4+2][IMWD];
-//     uchar worker3[HALF/4+2][IMWD];
-//     uchar worker4[HALF/4+2][IMWD];
-//     for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//          for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                fromDistributor :> worker1[y][x];                    //read the pixel value
-//               }
-//         }
-//     for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//             for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                   fromDistributor :> worker2[y][x];                    //read the pixel value
-//                  }
-//            }
-//     for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//             for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                   fromDistributor :> worker3[y][x];                    //read the pixel value
-//                  }
-//            }
-//     for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//             for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                   fromDistributor :> worker4[y][x];                    //read the pixel value
-//                  }
-//            }
-//     if (DEBUG){
-//             printf("finish initializetion for process2\n");
-//         }
-//
-////     while(1){
-//     // process current board
-//     // pass to process1
-//     //receive from process1
-////     printf("erroring message is ");
-//     for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//         fromDistributor:>worker1[HALF/4+1][x];
-////                    printf("%d",worker1[HALF/4+1][x]);
-//                   }
-////     printf("\n");
-//     for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//         fromDistributor:>worker4[LASTLINE][x];
-//          }
-//     // into processing
-//     par{
-//         //get bot
-//         memcpy(worker1[HALF/4],worker2[0],IMWD*sizeof(uchar));
-//         memcpy(worker2[HALF/4],worker3[0],IMWD*sizeof(uchar));
-//         memcpy(worker3[HALF/4],worker4[0],IMWD*sizeof(uchar));
-//         //get top
-//         memcpy(worker2[LASTLINE],worker1[HALF/4-1],IMWD*sizeof(uchar));
-//         memcpy(worker3[LASTLINE],worker2[HALF/4-1],IMWD*sizeof(uchar));
-//         memcpy(worker4[LASTLINE],worker3[HALF/4-1],IMWD*sizeof(uchar));
-//     }
-//     if (DEBUG){
-//         printf("finishing allocating2\n");
-//     }
-//     // start processing
-//     printf("start processing \n");
-//     par {
-//     worker(worker1);
-//     worker(worker2);
-//     worker(worker3);
-//     worker(worker4);
-//     }
-//     printf("finishing processing \n");
-//     if (DEBUG){
-//         printf("start outputing2\n");
-//     }
-////     select{
-////         case fromDistributor:>output:
-////         if(output){
-//                  fromDistributor<:1;
-//          for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//                   for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                       fromDistributor <: worker1[y][x];                    //read the pixel value
-//                   }
-//                  }
-//          for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//                   for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                       fromDistributor <: worker2[y][x];                    //read the pixel value
-//                        }
-//                  }
-//          for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//                   for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                       fromDistributor <: worker3[y][x];                    //read the pixel value
-//                        }
-//                  }
-//          for( int y = 0; y < HALF/4; y++ ) {   //go through all lines
-//                   for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                       fromDistributor <: worker4[y][x];                    //read the pixel value
-//                        }
-//                  }
-////              }
-////         break;
-////         default :
-////             continue;
-////     }
-////     round++;
-////     }
-//
-//}
-uchar calculateNextValue2(uchar farm[IMHT][IMWD], int n, int m) {
-    if (DEBUG){
-        printf("calculateing\n");
-    }
-    //
-//    // 4 rules
-    int neighbourlive = 0;
-
-    //check neibourlive number
-    for (int i = n - 1; i <= n + 1; i++) {
-        for (int j = m - 1; j <= m + 1; j++) {
-                if (farm[(i+IMHT)%IMHT][(j+IMWD)%IMWD] == LIVE &&!(i==n && j==m )) {
-                    neighbourlive++;
-                }
-        }
-    }
-
-    // the rule here
-    if (farm[n][m] == LIVE) {
-        if (neighbourlive < 2) return 0;
-        if (neighbourlive == 2 || neighbourlive == 3) return farm[n][m];
-        if (neighbourlive > 3) return 0;
-    }
-    else if (neighbourlive == 3) return LIVE;
-    else return farm[n][m];
-
-}
-
-
 typedef interface i {
     void f(uchar board[IMHT/numberOfWorker+2][IMWD],int id);
     [[guarded]]void g();
@@ -411,27 +182,39 @@ void myWorker(server interface i myworker,int name){
         }
 }
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton,client interface i myWorkerI[numberOfWorker])
+void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton,client interface i myWorkerI[numberOfWorker],chanend ToLEDs)
 {
     if (DEBUG){
             printf("intoDistributor\n");
         }
     timer t;
+    int SEPGREEN = 1;
+    int GREEN = 1<<2;
+    int BLUE =1<<1;
+    int RED = 1<<3;
     int start_time;
     int end_time;
-
-    uchar val;
+    int numberOfLiveCells;
+    int val;
+    int tilt;
         int round =0;
          int output;
 //         static int numberOfWorker = 2;
 //         int LASTLINE = HALF/4+1;
+         int Horizontal = 0;
          int TOPLINE = 0;
          int LASTLINE = IMHT/numberOfWorker-1;
          uchar board [numberOfWorker][IMHT/numberOfWorker+2][IMWD];
 //         uchar nextBoard [numberOfWorker][IMHT/numberOfWorker][IMWD];
          printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
          printf( "Waiting for Board Tilt...\n" );
-           fromAcc :> int value;
+//           fromAcc :> int value;
+//           fromButton:> val;
+           while(val!=14){   ///right start game
+               fromButton:> val;
+           }
+           ToLEDs <: GREEN;
+           printf("reading from file \n");
          for (int i = 0;i<numberOfWorker;i++){
              for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
                    for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -441,49 +224,72 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
          }
 //         fromAcc:>int acc;
          t:>start_time;
+         printf("start timing \n");
          while(1){
-            fromButton:>int value;
-            // get top line
-            for(int i = 0;i<numberOfWorker;i++){
-                for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-                      board[i][IMHT/numberOfWorker+1][x] = board[(i-1+numberOfWorker)%numberOfWorker][LASTLINE][x];                    //read the pixel value
+             fromAcc :> tilt;
+             // pause  game
+            if (tilt != Horizontal){
+                ToLEDs<:RED;
+                for (int i = 0;i<numberOfWorker;i++){
+                    for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
+                       for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
+                           if (board[i][y][x] == 255){
+                               numberOfLiveCells++;
+                           }
+                             printf( "-%4.1d ", board[i][y][x]);//read the pixel value
+                            }
+                       printf("\n");
                     }
-            }
-            //get bot line
-            for(int i = 0;i<numberOfWorker;i++){
-                for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-                      board[i][IMHT/numberOfWorker][x] = board[(i+1+numberOfWorker)%numberOfWorker][0][x];                    //read the pixel value
-                    }
-            }
-
-            myWorkerI[0].f(board[0],0);
-            myWorkerI[1].f(board[1],1);
-            myWorkerI[2].f(board[2],2);
-            myWorkerI[3].f(board[3],3);
-//
-//           par(int i = 0;i<numberOfWorker;i++){
-//               worker(board[i],nextBoard[i]);
-//           }
-//             workerInDistributor(board,nextBoard,0);
-//             workerInDistributor(board,nextBoard,1);
-//         }
-
-         printf("into processing \n");
-         for (int i = 0;i<numberOfWorker;i++){
-         for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
-            for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-//                  c_out <: nextBoard[y][x];
-                  printf( "-%4.1d ", board[i][y][x]);//read the pixel value
+                }
+                printf("Number of cell lives %d\n",numberOfLiveCells);
+                printf("round number is %d\n",round);
+                t :> end_time;
+                printf("Number of seconds: %u s", (end_time - start_time)/10000000);
+            } else
+          // continue game
+            {
+             select {
+                 case fromButton:> val:
+                     if (val == 13){
+                         //out put data
+                         printf("outputing data\n");
+                         ToLEDs<:BLUE;
+                         for (int i = 0;i<numberOfWorker;i++){
+                             for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
+                                for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
+                                      c_out<: board[i][y][x];//read the pixel value
+                                     }
+                             }
+                         }
+                     }
+                     break;
+              default:
+                  ToLEDs<:SEPGREEN;
+                  printf("into processing \n");
+                         // get top line
+                         for(int i = 0;i<numberOfWorker;i++){
+                             for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
+                                   board[i][IMHT/numberOfWorker+1][x] = board[(i-1+numberOfWorker)%numberOfWorker][LASTLINE][x];                    //read the pixel value
+                                 }
+                         }
+                         //get bot line
+                         for(int i = 0;i<numberOfWorker;i++){
+                             for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
+                                   board[i][IMHT/numberOfWorker][x] = board[(i+1+numberOfWorker)%numberOfWorker][0][x];                    //read the pixel value
+                                 }
+                         }
+                         // sending and receiving from worker
+                         for (int id = 0; id<numberOfWorker;id++){
+                             myWorkerI[id].f(board[id],id);
+                         }
+                         printf("finishing round %d\n",round);
+                         printf("round number is %d\n",round);
+                         round++;
+                         break;
                  }
-            printf("\n");
-         }
-         }
-             printf("round number is %d\n",round);
-             round++;
-//             memcpy(board,nextBoard,IMHT*IMWD*sizeof(uchar));
-             t :> end_time;
-             printf("Number of timer ticks elapsed: %u", end_time - start_time);
-         }
+               }
+             }
+
 
          //receive from process2
 
@@ -555,12 +361,15 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
     int x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
 
     //send signal to distributor after first tilt
-    if (!tilted) {
+//    if (!tilted) {
       if (x>30) {
-        tilted = 1 - tilted;
+//        tilted = 1 - tilted;
         toDist <: 1;
+      }else
+      {
+          toDist<:0;
       }
-    }
+//    }
   }
 }
 
@@ -581,27 +390,31 @@ int main(void) {
  //put your output image path here
 
   chan c_inIO, c_outIO, c_control,buttonsToDistributor,
-  distributorToVisualiser,
+  distributorToVisualiser,distributorToLEDs,
   visualiserToLEDs,toDistibutor2,toProcess1,toProcess2,bwProcess;    //extend your channel definitions here
 
   par {
     on tile[0]:i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]:accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
     on tile[0]:DataInStream(infname, c_inIO);          //thread to read in a PGM image
-    on tile[0]:DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
-    on tile[0]:distributor(c_inIO, c_outIO, c_control,buttonsToDistributor,myWorkerI);//thread to coordinate work on image
+    on tile[1]:DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
+    on tile[1]:distributor(c_inIO, c_outIO, c_control,buttonsToDistributor,myWorkerI,distributorToLEDs);//thread to coordinate work on image
     //HELPER PROCESSES USING BASIC I/O ON X-CORE200 EXPLORER
 //    on tile[0]:Process1(toProcess1,bwProcess);
 //    on tile[1]:Process2(toProcess2);
 //    on tile[0]: distributor2(toDistibutor2);
     on tile[1]:myWorker(myWorkerI[0],0);
     on tile[1]:myWorker(myWorkerI[1],1);
-    on tile[0]:myWorker(myWorkerI[2],1);
-    on tile[0]:myWorker(myWorkerI[3],1);
+    on tile[0]:myWorker(myWorkerI[2],2);
+    on tile[0]:myWorker(myWorkerI[3],3);
 
+    on tile[1]:myWorker(myWorkerI[4],4);
+    on tile[1]:myWorker(myWorkerI[5],5);
+    on tile[0]:myWorker(myWorkerI[6],6);
+    on tile[0]:myWorker(myWorkerI[7],7);
     on tile[0]: buttonListener(buttons, buttonsToDistributor);
 //    on tile[0]: visualiser(distributorToVisualiser,visualiserToLEDs);
-//    on tile[0]: showLEDs(leds,visualiserToLEDs);
+    on tile[0]: showLEDs(leds,distributorToLEDs);
   }
 
   return 0;

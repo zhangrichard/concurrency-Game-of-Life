@@ -7,8 +7,8 @@
 #include "pgmIO.h"
 #include "i2c.h"
 //#include "gameLogic.h"
-#define  IMHT 16                  //image height
-#define  IMWD 16                  //image width
+#define  IMHT 256                  //image height
+#define  IMWD 256                  //image width
 #define  LIVE 255
 typedef unsigned char uchar;      //using uchar as shorthand
 #define  HALF  IMHT/2
@@ -26,8 +26,8 @@ on tile[0]:port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 #define numberOfWorker 8
-char infname[] = "test.pgm";
-char outfname[] = "testout.pgm";
+char infname[] = "256x256.pgm";
+char outfname[] = "256x256_out.pgm";
 on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
 on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
@@ -47,47 +47,6 @@ int showLEDs(out port p, chanend fromDist) {
     p <: pattern;                //send pattern to LED port
   }
   return 0;
-}
-void visualiser(chanend distributorToVisualiser, chanend toLEDs) {
-//  unsigned int userAntToDisplay = 11;
-//  unsigned int attackerAntToDisplay = 2;
-//  int pattern = 0;
-//  int round = 0;
-//  int distance = 0;
-//  int dangerzone = 0;
-//  while (1) {
-//    if (round==0) printstr("ANT DEFENDER GAME (press button to start)\n");
-//    round++;
-//    select {
-//      case fromUserAnt :> userAntToDisplay:
-//         //stop signal
-//          if (userAntToDisplay==-1){
-//              toLEDs <: -1;
-//              return;
-//          }
-//        consolePrint(userAntToDisplay,attackerAntToDisplay);
-//        break;
-//      case fromAttackerAnt :> attackerAntToDisplay:
-//        consolePrint(userAntToDisplay,attackerAntToDisplay);
-//        break;
-//    }
-//    distance = userAntToDisplay-attackerAntToDisplay;
-//    dangerzone = ((attackerAntToDisplay==7) || (attackerAntToDisplay==15));
-//    pattern = round%2 + 8 * dangerzone + 2 * ((distance==1) || (distance==-1));
-//    if ((attackerAntToDisplay>7)&&(attackerAntToDisplay<15)) pattern = 15;
-    int pattern;
-    distributorToVisualiser:>pattern;
-    printf("led value is %d",pattern);
-    toLEDs <: pattern;
-//  }
-}
-//WAIT function
-void waitMoment() {
-  timer tmr;
-  int waitTime;
-  tmr :> waitTime;                       //read current timer value
-  waitTime += 40000000;                  //set waitTime to 0.4s after value
-  tmr when timerafter(waitTime) :> void; //wait until waitTime is reached
 }
 
 void DataInStream( char infname[],chanend c_out)
@@ -164,7 +123,6 @@ uchar calculateNextValue(uchar farm[IMHT/numberOfWorker+2][IMWD], int n, int m) 
 }
 typedef interface i {
     void f(uchar board[IMHT/numberOfWorker+2][IMWD],int id);
-    [[guarded]]void g();
 }i;
 void myWorker(server interface i myworker,int name){
     uchar  array[IMHT/numberOfWorker+2][IMWD];
@@ -194,18 +152,14 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
     int RED = 1<<3;
     int start_time;
     int end_time;
-    int numberOfLiveCells;
-    int val;
+    int val =0;
     int tilt;
         int round =0;
          int output;
-//         static int numberOfWorker = 2;
-//         int LASTLINE = HALF/4+1;
          int Horizontal = 0;
          int TOPLINE = 0;
          int LASTLINE = IMHT/numberOfWorker-1;
          uchar board [numberOfWorker][IMHT/numberOfWorker+2][IMWD];
-//         uchar nextBoard [numberOfWorker][IMHT/numberOfWorker][IMWD];
          printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
          printf( "Waiting for Board Tilt...\n" );
 //           fromAcc :> int value;
@@ -227,9 +181,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
          printf("start timing \n");
          while(1){
              fromAcc :> tilt;
+
              // pause  game
             if (tilt != Horizontal){
                 ToLEDs<:RED;
+                int numberOfLiveCells = 0;
                 for (int i = 0;i<numberOfWorker;i++){
                     for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
                        for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -245,6 +201,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                 printf("round number is %d\n",round);
                 t :> end_time;
                 printf("Number of seconds: %u s", (end_time - start_time)/10000000);
+                while(tilt != Horizontal) fromAcc:> tilt;
             } else
           // continue game
             {
@@ -287,8 +244,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                          round++;
                          break;
                  }
+                 ToLEDs<:0;
                }
+
              }
+
 
 
          //receive from process2
@@ -400,9 +360,6 @@ int main(void) {
     on tile[1]:DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
     on tile[1]:distributor(c_inIO, c_outIO, c_control,buttonsToDistributor,myWorkerI,distributorToLEDs);//thread to coordinate work on image
     //HELPER PROCESSES USING BASIC I/O ON X-CORE200 EXPLORER
-//    on tile[0]:Process1(toProcess1,bwProcess);
-//    on tile[1]:Process2(toProcess2);
-//    on tile[0]: distributor2(toDistibutor2);
     on tile[1]:myWorker(myWorkerI[0],0);
     on tile[1]:myWorker(myWorkerI[1],1);
     on tile[0]:myWorker(myWorkerI[2],2);
@@ -413,7 +370,6 @@ int main(void) {
     on tile[0]:myWorker(myWorkerI[6],6);
     on tile[0]:myWorker(myWorkerI[7],7);
     on tile[0]: buttonListener(buttons, buttonsToDistributor);
-//    on tile[0]: visualiser(distributorToVisualiser,visualiserToLEDs);
     on tile[0]: showLEDs(leds,distributorToLEDs);
   }
 

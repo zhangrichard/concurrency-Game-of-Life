@@ -7,11 +7,12 @@
 #include "pgmIO.h"
 #include "i2c.h"
 //#include "gameLogic.h"
-#define  INIMHT 16                  //image height
-#define INIMWD 16
+#define  INIMHT 512                  // input image height
+#define INIMWD 512                   // input image height
 #define  IMHT INIMHT                  //image height
-#define  IMWD (INIMWD/8)                  //image width
+#define  IMWD (INIMWD/8)                  // image width
 #define  LIVE 1
+#define numberOfWorker 4
 typedef unsigned char uchar;      //using uchar as shorthand
 #define  HALF  IMHT/2
 on tile[0]:port p_scl = XS1_PORT_1E;         //interface ports to accelerometer
@@ -27,9 +28,9 @@ on tile[0]:port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Y_LSB 0x4
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
-#define numberOfWorker 2
-char infname[] = "test.pgm";
-char outfname[] = "testout.pgm";
+
+char infname[] = "512x512.pgm";
+char outfname[] = "512x512_out.pgm";
 on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
 on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
@@ -70,10 +71,10 @@ void DataInStream( char infname[],chanend c_out)
     // pass first half
     for( int x = 0; x < INIMWD; x++ ) {
       c_out <: line[ x ];
-      printf( "-%4.1d ", line[ x ] ); //show image values
+//      printf( "-%4.1d ", line[ x ] ); //show image values
     }
 
-    printf( "\n" );
+//    printf( "\n" );
   }
   //Close PGM image file
   _closeinpgm();
@@ -137,26 +138,43 @@ uchar calculateNextValue(uchar farm[IMHT/numberOfWorker+2][IMWD], int n, int m,i
 
 }
 typedef interface i {
-    void f(uchar board[IMHT/numberOfWorker+2][IMWD],int id);
+    void send(uchar board[IMHT/numberOfWorker+2][IMWD],int id);
+    void receive(uchar board[IMHT/numberOfWorker+2][IMWD]);
 }i;
 void myWorker(server interface i myworker,int name){
     uchar  array[IMHT/numberOfWorker+2][IMWD];
+    uchar  output[IMHT/numberOfWorker+2][IMWD];
+    int receive = 0;
     while(1){
         select{
-            case myworker.f(uchar board[IMHT/numberOfWorker+2][IMWD],int id):
+            case myworker.send(uchar board[IMHT/numberOfWorker+2][IMWD],int id):
             memcpy(array,board,(IMHT/numberOfWorker+2)*IMWD*sizeof(uchar));
+            receive = 0;
+            break;
+
+        case myworker.receive(uchar board[IMHT/numberOfWorker+2][IMWD]):
             for (int y = 0; y<IMHT/numberOfWorker;y++){
                 for (int x = 0;x<IMWD;x++){
-                    uchar result=0;
-                    for (int i = 0; i < 8; i++){
-                        result |= calculateNextValue(array,y,x,i)<<(7-i);
-                    }
-                    board[y][x] = result;
+                    board[y][x] = output[y][x];
                 }
             }
-            break;
-               }
+            receive = 1;
+        break;
+            }
+        if (receive){
+            continue;
         }
+        // calculate
+        for (int y = 0; y<IMHT/numberOfWorker;y++){
+            for (int x = 0;x<IMWD;x++){
+                uchar result=0;
+                for (int i = 0; i < 8; i++){
+                    result |= calculateNextValue(array,y,x,i)<<(7-i);
+                }
+                output[y][x] = result;
+            }
+        }
+    }
 }
 
 void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton,client interface i myWorkerI[numberOfWorker],chanend ToLEDs)
@@ -210,9 +228,19 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
          while(1){
              fromAcc :> tilt;
              // pause  game
+             if (round ==100){
+                 t :> end_time;
+                timeLast += (end_time - start_time)/100000000;
+                t:>start_time;
+                printf("Number of seconds: %u s", timeLast);
+             }
+
             if (tilt != Horizontal){
                 ToLEDs<:RED;
                 int numberOfLiveCells = 0;
+                t :> end_time;
+               timeLast += (end_time - start_time)/100000000;
+               t:>start_time;
                 for (int i = 0;i<numberOfWorker;i++){
                     for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
                        for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -228,9 +256,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                        printf("\n");
                     }
                 }
-                t :> end_time;
-                timeLast += (end_time - start_time)/100000000;
-                t:>start_time;
+
 
                 printf("Number of seconds: %u s", timeLast);
                 printf("Number of cell lives %d\n",numberOfLiveCells);
@@ -253,6 +279,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
           // continue game
             {
              select {
+
                  case fromButton:> val:
                      if (val == 13){
                          //out put data
@@ -280,7 +307,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                   if(round%2){
                       ToLEDs<:SEPGREEN;
                   }
-                  printf("into processing \n");
+//                  printf("into processing \n");
                          // get top line
                          for(int i = 0;i<numberOfWorker;i++){
                              for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -295,8 +322,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                          }
                          // sending and receiving from worker
                          for (int id = 0; id<numberOfWorker;id++){
-                             myWorkerI[id].f(board[id],id);
+                             myWorkerI[id].send(board[id],id);
                          }
+                         for (int id = 0; id<numberOfWorker;id++){
+                              myWorkerI[id].receive(board[id]);
+                          }
                          printf("finishing round %d\n",round);
                          round++;
                          break;
@@ -349,7 +379,6 @@ void DataOutStream( char outfname[],chanend c_in)
 void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
   i2c_regop_res_t result;
   char status_data = 0;
-  int tilted = 0;
 
   // Configure FXOS8700EQ
   result = i2c.write_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_XYZ_DATA_CFG_REG, 0x01);
@@ -377,13 +406,11 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
     //send signal to distributor after first tilt
 //    if (!tilted) {
       if (x>30) {
-//        tilted = 1 - tilted;
         toDist <: 1;
       }else
       {
           toDist<:0;
       }
-//    }
   }
 }
 
@@ -416,9 +443,9 @@ int main(void) {
     //HELPER PROCESSES USING BASIC I/O ON X-CORE200 EXPLORER
     on tile[1]:myWorker(myWorkerI[0],0);
     on tile[1]:myWorker(myWorkerI[1],1);
-//    on tile[1]:myWorker(myWorkerI[2],2);
-//    on tile[1]:myWorker(myWorkerI[3],3);
-//
+    on tile[0]:myWorker(myWorkerI[2],2);
+    on tile[0]:myWorker(myWorkerI[3],3);
+
 //    on tile[0]:myWorker(myWorkerI[4],4);
 //    on tile[0]:myWorker(myWorkerI[5],5);
 //    on tile[0]:myWorker(myWorkerI[6],6);

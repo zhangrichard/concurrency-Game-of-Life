@@ -195,9 +195,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
     uchar inputVal;
     int tilt;
         int round =0;
-         int output;
          int Horizontal = 0;
-         int TOPLINE = 0;
          int LASTLINE = IMHT/numberOfWorker-1;
          uchar board [numberOfWorker][IMHT/numberOfWorker+2][IMWD];
          printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
@@ -222,25 +220,24 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                    }
               }
          }
-//         fromAcc:>int acc;
          t:>start_time;
          printf("start timing \n");
          while(1){
              fromAcc :> tilt;
              // pause  game
-             if (round ==100){
-                 t :> end_time;
-                timeLast += (end_time - start_time)/100000000;
-                t:>start_time;
-                printf("Number of seconds: %u s", timeLast);
-             }
+//             if (round ==100){
+//                 t :> end_time;
+//                timeLast += (end_time - start_time)/100000000;
+//                t:>start_time;
+//                printf("Number of seconds: %u s", timeLast);
+//             }
 
             if (tilt != Horizontal){
                 ToLEDs<:RED;
                 int numberOfLiveCells = 0;
                 t :> end_time;
-               timeLast += (end_time - start_time)/100000000;
-               t:>start_time;
+                timeLast += (end_time - start_time)/100000000;
+                t:>start_time;
                 for (int i = 0;i<numberOfWorker;i++){
                     for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
                        for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -256,8 +253,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                        printf("\n");
                     }
                 }
-
-
                 printf("Number of seconds: %u s", timeLast);
                 printf("Number of cell lives %d\n",numberOfLiveCells);
                 printf("round number is %d\n",round);
@@ -307,7 +302,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                   if(round%2){
                       ToLEDs<:SEPGREEN;
                   }
-//                  printf("into processing \n");
                          // get top line
                          for(int i = 0;i<numberOfWorker;i++){
                              for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
@@ -430,9 +424,7 @@ int main(void) {
      //put your input image path here
  //put your output image path here
 
-  chan c_inIO, c_outIO, c_control,buttonsToDistributor,
-  distributorToVisualiser,distributorToLEDs,
-  visualiserToLEDs,toDistibutor2,toProcess1,toProcess2,bwProcess;    //extend your channel definitions here
+  chan c_inIO, c_outIO, c_control,buttonsToDistributor,distributorToLEDs;    //extend your channel definitions here
 
   par {
     on tile[0]:i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data

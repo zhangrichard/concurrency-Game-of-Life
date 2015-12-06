@@ -7,8 +7,8 @@
 #include "pgmIO.h"
 #include "i2c.h"
 //#include "gameLogic.h"
-#define  IMHT 256                  //image height
-#define  IMWD 256                  //image width
+#define  IMHT 16                  //image height
+#define  IMWD 16                  //image width
 #define  LIVE 255
 typedef unsigned char uchar;      //using uchar as shorthand
 #define  HALF  IMHT/2
@@ -26,8 +26,8 @@ on tile[0]:port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 #define numberOfWorker 8
-char infname[] = "256x256.pgm";
-char outfname[] = "256x256_out.pgm";
+char infname[] = "test.pgm";
+char outfname[] = "test_out.pgm";
 on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
 on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
@@ -97,6 +97,10 @@ void buttonListener(in port b, chanend toDistributor ) {
 // Currently the function just inverts the image
 //
 /////////////////////////////////////////////////////////////////////////////////////////
+//uchar bitValue(uchar input ,int position){
+//    uchar result;
+//    return result |= (input[i] == '1') << (7 - position);
+//}
 uchar calculateNextValue(uchar farm[IMHT/numberOfWorker+2][IMWD], int n, int m) {
 //    if (n ==1 && m ==1){
 //        printf("calculateing\n");
@@ -130,11 +134,23 @@ void myWorker(server interface i myworker,int name){
         select{
             case myworker.f(uchar board[IMHT/numberOfWorker+2][IMWD],int id):
             memcpy(array,board,(IMHT/numberOfWorker+2)*IMWD*sizeof(uchar));
-                    for( int y = 0; y < IMHT/numberOfWorker; y++ ) {   //go through all lines
-                              for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
-                                  board[y][x] = calculateNextValue(array,y,x);                    //read the pixel value
-                                   }
-                         }
+            for (int y = 0; y<IMHT/numberOfWorker;y++){
+
+                for (int x = 0;x<IMWD;x++){
+//                    uchar temp[10];
+//                    int result = 0;
+//                    temp[0] = (x-1+IMWD)%IMWD &1; //leftmost value
+//                    for (int i = 1; i < 9; i++){
+//                        temp[i]=x<<(7-i);
+//                    }
+//                    temp[9] = (x+1+IMWD)%IMWD >>7&1;//rightmost value
+//                    for (int i = 1; i < 9; i++){
+//                        result |= calculateNextValue(array,y,temp,i)<<(7-(i-1));
+//                    }
+                    board[y][x] = calculateNextValue(array,y,x);
+                }
+            }
+
             break;
                }
         }
@@ -150,8 +166,10 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
     int GREEN = 1<<2;
     int BLUE =1<<1;
     int RED = 1<<3;
-    int start_time;
-    int end_time;
+    unsigned int start_time;
+    unsigned int end_time;
+    unsigned int period = 20*100000000;
+    unsigned int timeLast = 0;
     int val =0;
     int tilt;
         int round =0;
@@ -181,7 +199,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
          printf("start timing \n");
          while(1){
              fromAcc :> tilt;
-
              // pause  game
             if (tilt != Horizontal){
                 ToLEDs<:RED;
@@ -197,11 +214,29 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                        printf("\n");
                     }
                 }
+
+                t :> end_time;
+//                select{
+                timeLast += (end_time - start_time)/100000000;
+                t:>start_time;
+
+                printf("Number of seconds: %u s", timeLast);
                 printf("Number of cell lives %d\n",numberOfLiveCells);
                 printf("round number is %d\n",round);
-                t :> end_time;
-                printf("Number of seconds: %u s", (end_time - start_time)/10000000);
-                while(tilt != Horizontal) fromAcc:> tilt;
+
+                while(tilt != Horizontal)
+                    {
+                    select {
+                        case fromAcc:> tilt:
+
+                        break;
+                    case t when timerafter(start_time + period) :> void:
+//                       // restart timer
+                         t:>start_time;
+                        timeLast += 20;
+                        break;
+                    }
+                    }
             } else
           // continue game
             {
@@ -220,8 +255,15 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
                          }
                      }
                      break;
+                 case t when timerafter(start_time + period) :> void:
+//                       // restart timer
+                         t:>start_time;
+                        timeLast += 20;
+                        continue;
               default:
-                  ToLEDs<:SEPGREEN;
+                  if(round%2){
+                      ToLEDs<:SEPGREEN;
+                  }
                   printf("into processing \n");
                          // get top line
                          for(int i = 0;i<numberOfWorker;i++){
@@ -249,10 +291,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
 
              }
 
-
-
-         //receive from process2
-
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -261,7 +299,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc,chanend fromButton
 /////////////////////////////////////////////////////////////////////////////////////////
 void DataOutStream( char outfname[],chanend c_in)
 {
-
+  while(1){
   int res;
   uchar line[ IMWD ];
 
@@ -284,6 +322,7 @@ void DataOutStream( char outfname[],chanend c_in)
   //Close the PGM image
   _closeoutpgm();
   printf( "DataOutStream:Done...\n" );
+  }
   return;
 }
 
@@ -362,11 +401,11 @@ int main(void) {
     //HELPER PROCESSES USING BASIC I/O ON X-CORE200 EXPLORER
     on tile[1]:myWorker(myWorkerI[0],0);
     on tile[1]:myWorker(myWorkerI[1],1);
-    on tile[0]:myWorker(myWorkerI[2],2);
-    on tile[0]:myWorker(myWorkerI[3],3);
+    on tile[1]:myWorker(myWorkerI[2],2);
+    on tile[1]:myWorker(myWorkerI[3],3);
 
-    on tile[1]:myWorker(myWorkerI[4],4);
-    on tile[1]:myWorker(myWorkerI[5],5);
+    on tile[0]:myWorker(myWorkerI[4],4);
+    on tile[0]:myWorker(myWorkerI[5],5);
     on tile[0]:myWorker(myWorkerI[6],6);
     on tile[0]:myWorker(myWorkerI[7],7);
     on tile[0]: buttonListener(buttons, buttonsToDistributor);
